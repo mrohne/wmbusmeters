@@ -1,4 +1,4 @@
-idf_component_register(SRCS 
+idf_component_register(SRCS
 		       "src/esp32wmbusmeters.cc"
 		       "src/esp32util.cc"
 		       "src/esp32dynamic.cc"
@@ -12,13 +12,15 @@ idf_component_register(SRCS
 		       "src/dvparser.cc"
 		       "src/aes.cc"
 		       "src/aescmac.cc"
+		       "src/sha256.cc"
 		       "src/wmbus_utils.cc"
 		       "src/translatebits.cc"
 		       "src/formula.cc"
 		       "src/units.cc"
 		       "src/manufacturer_specificities.cc"
-		       "src/driver_flowiq2200.cc"
+	               "src/driver_flowiq2200.cc"
                        INCLUDE_DIRS "src"
-                       REQUIRES driver
-		       WHOLE_ARCHIVE)
+		       WHOLE_ARCHIVE
+		       REQUIRES driver)
+
 

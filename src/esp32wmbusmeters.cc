@@ -30,61 +30,69 @@
 
 using namespace std;
 
-static MeterInfo mi;
+static std::vector<MeterInfo> infos;
 extern "C" {
 
 void esp32meter(const char *name, const char *driver, const char *id, const char *key)
 {
-  if (mi.parse(name, driver, id, key)) {
-    ESP_LOGW("WMBUS", "%-20s %s %s %s %s", __FUNCTION__, name, driver, id, key);
+  //Configure meter
+  MeterInfo info;
+  if (info.parse(name, driver, id, key)) {
+    ESP_LOGI("WMBUS", "%s %s %s %s %s", __FUNCTION__, name, driver, id, key);
+    infos.push_back(info);
   }
   else {
-    ESP_LOGE("WMBUS", "%-20s %s %s %s %s", __FUNCTION__, name, driver, id, key);
+    ESP_LOGW("WMBUS", "%s %s %s %s %s", __FUNCTION__, name, driver, id, key);
   }
 }
   
 void esp32frame(void *ring)
 {
   traceEnabled(true);
+  debugEnabled(true);
+  verboseEnabled(true);
   logTelegramsEnabled(true);
-  
-  shared_ptr<Meter> meter = createMeter(&mi);
-  Telegram telegram;
+  //Create meters
+  std::vector<shared_ptr<Meter>> meters;
+  for (auto &info : infos) {
+    shared_ptr<Meter> meter = createMeter(&info);
+    meters.push_back(meter);
+  }
   for (;;) {
     size_t   len;
     uint8_t *buf;
-    int      rssi;
     //Wait for data
     buf = (uint8_t *)xRingbufferReceive(ring, &len, portMAX_DELAY);
     if (buf == NULL) {
-      ESP_LOGD("WMBUS", "%-20s timeout", __FUNCTION__);
+      ESP_LOGW("WMBUS", "%s timeout", __FUNCTION__);
       continue;
     }
-    printf("%-20s 0x%02x bytes ","CCxxx0_RXFIFO", len);
-    for (int i=0;i<len;i++) {
-      printf("%02x",buf[i]);
+    if (len < 1) {
+      ESP_LOGW("WMBUS", "%s empty", __FUNCTION__);
+      continue;
     }
-    printf("\n");
-
-    rssi = buf[len-2];
-    vector<uchar> frame(buf, buf+len);
+    //Strip crc, rssi, status
+    double rssi = (buf[len-2]<0x80) ? double(buf[len-2])/2.0-74 : double(buf[len-2]-256)/2.0-74;
+    buf[0] -= 2;
+    vector<uchar> frame(buf, buf+1+buf[0]);
     vRingbufferReturnItem(ring, buf);
-
-    vector<Address> id;
-    bool match;
-    AboutTelegram about("cc1101", rssi, FrameType::WMBUS);
-    meter->handleTelegram(about, frame, false, &id, &match, &telegram);
-    ESP_LOGI("WMBUS","handle ok");
-
-    string hr, fields, json;
-    vector<string> envs, more_json, selected_fields;
-    meter->printMeter(&telegram, &hr, &fields, '\t', &json, &envs, &more_json, &selected_fields, true);
-    ESP_LOGI("WMBUS","json: %s",json.c_str());    
-    for (auto json: more_json) {
-      ESP_LOGI("WMBUS","json: %s",json.c_str());
+    //Loop over registered meters
+    for (auto &meter : meters) {
+      vector<Address> id;
+      bool match = false;
+      Telegram telegram;
+      AboutTelegram about(meter->name(), rssi, FrameType::WMBUS);
+      bool handle = meter->handleTelegram(about, frame, false, &id, &match, &telegram);
+      telegram.explainParse("("+meter->name()+")", 0);
+      if (!handle || !match) continue;
+      //Print details
+      string hr, fields, json;
+      vector<string> envs, more_json, selected_fields;
+      meter->printMeter(&telegram, &hr, &fields, '\t', &json, &envs, &more_json, &selected_fields, true);
+      printf("%s %s\n","printMeter json", json.c_str());
     }
   }
-
+  //Never reached
   vTaskDelete(NULL);
 }
 
