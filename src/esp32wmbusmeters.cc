@@ -24,6 +24,7 @@
 #include"freertos/FreeRTOS.h"
 #include"freertos/task.h"
 #include"freertos/ringbuf.h"
+#include"mqtt_client.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_INFO
 #include "esp_log.h"
@@ -45,7 +46,10 @@ void esp32meter(const char *name, const char *driver, const char *id, const char
     ESP_LOGW("WMBUS", "%s %s %s %s %s", __FUNCTION__, name, driver, id, key);
   }
 }
-  
+static RingbufHandle_t ring;
+static esp_mqtt_client_handle_t client;
+static TaskHandle_t wmbus = NULL;
+
 void esp32frame(void *ring)
 {
   traceEnabled(true);
@@ -88,12 +92,22 @@ void esp32frame(void *ring)
       //Print details
       string hr, fields, json;
       vector<string> envs, more_json, selected_fields;
-      meter->printMeter(&telegram, &hr, &fields, '\t', &json, &envs, &more_json, &selected_fields, true);
-      printf("%s %s\n","printMeter json", json.c_str());
+      meter->printMeter(&telegram, &hr, &fields, '\t', &json, &envs, &more_json, &selected_fields, false);
+      char topic[0x100];
+      snprintf(topic, sizeof(topic), "wmbusmeters/%s/%s/data", meter->driverName().str().c_str(), meter->name().c_str());
+      esp_mqtt_client_publish(client, topic, json.c_str(), 0, 0, 1);
+      printf("%s %s\n", topic, json.c_str());
     }
   }
   //Never reached
   vTaskDelete(NULL);
+}  
+RingbufHandle_t esp32start(esp_mqtt_client_handle_t _client)
+{
+  client = _client;
+  ring = xRingbufferCreate(1028, RINGBUF_TYPE_NOSPLIT);
+  xTaskCreate(&esp32frame, "WMBUS", 1024*16, ring, tskIDLE_PRIORITY, &wmbus);
+  return ring;
 }
 
 }

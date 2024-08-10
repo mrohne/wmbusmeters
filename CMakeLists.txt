@@ -21,6 +21,6 @@ idf_component_register(SRCS
 	               "src/driver_flowiq2200.cc"
                        INCLUDE_DIRS "src"
 		       WHOLE_ARCHIVE
-		       REQUIRES driver)
+		       REQUIRES driver mqtt)
 
 

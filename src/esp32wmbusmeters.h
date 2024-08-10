@@ -16,5 +16,5 @@
 */
 
 void esp32meter(const char *name, const char *driver, const char *id, const char *key);
-void esp32frame(void *ring);
+RingbufHandle_t esp32start(esp_mqtt_client_handle_t client);
 
